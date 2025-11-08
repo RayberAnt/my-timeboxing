@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { GripVertical, Plus, X, Calendar } from 'lucide-react';
+import { GripVertical, Plus, X, Calendar, ChevronUp, ChevronDown } from 'lucide-react';
 
 export default function TimeboxingApp() {
   const [topPriorities, setTopPriorities] = useState(['', '', '']);
   const [brainDump, setBrainDump] = useState(['']);
   const [timeBlocks, setTimeBlocks] = useState({});
+  const [draggedTask, setDraggedTask] = useState(null);
 
   const currentDate = new Date().toLocaleDateString('es-ES', { 
     day: '2-digit', 
@@ -57,23 +58,56 @@ export default function TimeboxingApp() {
     }
   };
 
-  const handleDragStart = (e, text, source) => {
-    e.dataTransfer.setData('text', text);
-    e.dataTransfer.setData('source', source);
+  const handleDragStart = (e, text, source, fromKey = null, fromIndex = null) => {
+    const dragData = {
+      text,
+      source,
+      fromKey,
+      fromIndex
+    };
+    setDraggedTask(dragData);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
   };
 
   const handleDrop = (e, hour, half) => {
     e.preventDefault();
-    const text = e.dataTransfer.getData('text');
-    if (text.trim()) {
-      const key = `${hour}-${half}`;
-      const currentItems = timeBlocks[key] || [];
-      setTimeBlocks({ ...timeBlocks, [key]: [...currentItems, text] });
+    e.stopPropagation();
+    
+    const key = `${hour}-${half}`;
+    let dragData;
+    
+    try {
+      dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
+    } catch {
+      dragData = draggedTask || { text: e.dataTransfer.getData('text'), source: 'external' };
     }
+
+    if (!dragData.text || !dragData.text.trim()) return;
+
+    const newBlocks = { ...timeBlocks };
+
+    // Si viene de otro bloque del schedule, eliminarlo del origen
+    if (dragData.fromKey && dragData.fromIndex !== null) {
+      if (newBlocks[dragData.fromKey]) {
+        newBlocks[dragData.fromKey] = newBlocks[dragData.fromKey].filter((_, i) => i !== dragData.fromIndex);
+        if (newBlocks[dragData.fromKey].length === 0) {
+          delete newBlocks[dragData.fromKey];
+        }
+      }
+    }
+
+    // Agregar al nuevo bloque
+    const currentItems = newBlocks[key] || [];
+    newBlocks[key] = [...currentItems, { text: dragData.text, completed: false }];
+    
+    setTimeBlocks(newBlocks);
+    setDraggedTask(null);
   };
 
   const handleDragOver = (e) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
   };
 
   const removeTimeBlock = (key, itemIndex) => {
@@ -84,6 +118,35 @@ export default function TimeboxingApp() {
         delete newBlocks[key];
       }
     }
+    setTimeBlocks(newBlocks);
+  };
+
+  const toggleTaskComplete = (key, itemIndex) => {
+    const newBlocks = { ...timeBlocks };
+    if (newBlocks[key] && newBlocks[key][itemIndex]) {
+      newBlocks[key][itemIndex] = {
+        ...newBlocks[key][itemIndex],
+        completed: !newBlocks[key][itemIndex].completed
+      };
+      setTimeBlocks(newBlocks);
+    }
+  };
+
+  const moveTaskUp = (key, itemIndex) => {
+    if (itemIndex === 0) return;
+    const newBlocks = { ...timeBlocks };
+    const items = [...newBlocks[key]];
+    [items[itemIndex - 1], items[itemIndex]] = [items[itemIndex], items[itemIndex - 1]];
+    newBlocks[key] = items;
+    setTimeBlocks(newBlocks);
+  };
+
+  const moveTaskDown = (key, itemIndex) => {
+    const newBlocks = { ...timeBlocks };
+    if (itemIndex === newBlocks[key].length - 1) return;
+    const items = [...newBlocks[key]];
+    [items[itemIndex], items[itemIndex + 1]] = [items[itemIndex + 1], items[itemIndex]];
+    newBlocks[key] = items;
     setTimeBlocks(newBlocks);
   };
 
@@ -215,15 +278,55 @@ export default function TimeboxingApp() {
                     {timeBlocks[`${hour}-00`] && (
                       <div className="space-y-2">
                         {timeBlocks[`${hour}-00`].map((task, idx) => (
-                          <div key={idx} className="relative bg-white border-2 border-indigo-300 rounded p-2 shadow-sm">
-                            <button
-                              onClick={() => removeTimeBlock(`${hour}-00`, idx)}
-                              className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          <div
+                            key={idx}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-00`, idx)}
+                            className={`relative border-2 rounded p-2 shadow-sm cursor-move transition-all ${
+                              task.completed
+                                ? 'bg-gray-100 border-gray-300 opacity-60'
+                                : 'bg-white border-indigo-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1 absolute -top-2 -right-2">
+                              {timeBlocks[`${hour}-00`].length > 1 && (
+                                <>
+                                  {idx > 0 && (
+                                    <button
+                                      onClick={() => moveTaskUp(`${hour}-00`, idx)}
+                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
+                                      title="Mover arriba"
+                                    >
+                                      <ChevronUp className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                  {idx < timeBlocks[`${hour}-00`].length - 1 && (
+                                    <button
+                                      onClick={() => moveTaskDown(`${hour}-00`, idx)}
+                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
+                                      title="Mover abajo"
+                                    >
+                                      <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              <button
+                                onClick={() => removeTimeBlock(`${hour}-00`, idx)}
+                                className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 z-10"
+                                title="Eliminar"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <div
+                              onClick={() => toggleTaskComplete(`${hour}-00`, idx)}
+                              className={`text-sm font-medium pr-16 cursor-pointer select-none ${
+                                task.completed ? 'line-through text-gray-500' : 'text-gray-800'
+                              }`}
                             >
-                              <X className="w-3 h-3" />
-                            </button>
-                            <div className="text-sm font-medium text-gray-800 pr-4">
-                              {task}
+                              <GripVertical className="w-3 h-3 inline mr-1 text-gray-400" />
+                              {task.text}
                             </div>
                           </div>
                         ))}
@@ -246,15 +349,55 @@ export default function TimeboxingApp() {
                     {timeBlocks[`${hour}-30`] && (
                       <div className="space-y-2">
                         {timeBlocks[`${hour}-30`].map((task, idx) => (
-                          <div key={idx} className="relative bg-white border-2 border-indigo-300 rounded p-2 shadow-sm">
-                            <button
-                              onClick={() => removeTimeBlock(`${hour}-30`, idx)}
-                              className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          <div
+                            key={idx}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-30`, idx)}
+                            className={`relative border-2 rounded p-2 shadow-sm cursor-move transition-all ${
+                              task.completed
+                                ? 'bg-gray-100 border-gray-300 opacity-60'
+                                : 'bg-white border-indigo-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1 absolute -top-2 -right-2">
+                              {timeBlocks[`${hour}-30`].length > 1 && (
+                                <>
+                                  {idx > 0 && (
+                                    <button
+                                      onClick={() => moveTaskUp(`${hour}-30`, idx)}
+                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
+                                      title="Mover arriba"
+                                    >
+                                      <ChevronUp className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                  {idx < timeBlocks[`${hour}-30`].length - 1 && (
+                                    <button
+                                      onClick={() => moveTaskDown(`${hour}-30`, idx)}
+                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
+                                      title="Mover abajo"
+                                    >
+                                      <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              <button
+                                onClick={() => removeTimeBlock(`${hour}-30`, idx)}
+                                className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 z-10"
+                                title="Eliminar"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <div
+                              onClick={() => toggleTaskComplete(`${hour}-30`, idx)}
+                              className={`text-sm font-medium pr-16 cursor-pointer select-none ${
+                                task.completed ? 'line-through text-gray-500' : 'text-gray-800'
+                              }`}
                             >
-                              <X className="w-3 h-3" />
-                            </button>
-                            <div className="text-sm font-medium text-gray-800 pr-4">
-                              {task}
+                              <GripVertical className="w-3 h-3 inline mr-1 text-gray-400" />
+                              {task.text}
                             </div>
                           </div>
                         ))}

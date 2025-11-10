@@ -1,12 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GripVertical, Plus, X, Calendar, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 
 export default function TimeboxingApp() {
   const [topPriorities, setTopPriorities] = useState(['', '', '']);
   const [brainDump, setBrainDump] = useState(['']);
   const [timeBlocks, setTimeBlocks] = useState({});
-  const [draggedTask, setDraggedTask] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Estados para el drag personalizado
+  const [dragState, setDragState] = useState({
+    isDragging: false,
+    dragData: null,
+    ghostElement: null,
+    initialX: 0,
+    initialY: 0,
+    currentX: 0,
+    currentY: 0
+  });
+
+  const dragGhostRef = useRef(null);
+  const autoScrollIntervalRef = useRef(null);
 
   const currentDate = new Date().toLocaleDateString('es-ES', { 
     day: '2-digit', 
@@ -16,22 +29,16 @@ export default function TimeboxingApp() {
 
   const hours = Array.from({ length: 19 }, (_, i) => i + 5);
 
-  // Cargar datos del localStorage al iniciar (solo una vez)
+  // Cargar datos del localStorage
   useEffect(() => {
     try {
       const savedPriorities = localStorage.getItem('myTimeboxing_topPriorities');
       const savedBrainDump = localStorage.getItem('myTimeboxing_brainDump');
       const savedTimeBlocks = localStorage.getItem('myTimeboxing_timeBlocks');
 
-      if (savedPriorities) {
-        setTopPriorities(JSON.parse(savedPriorities));
-      }
-      if (savedBrainDump) {
-        setBrainDump(JSON.parse(savedBrainDump));
-      }
-      if (savedTimeBlocks) {
-        setTimeBlocks(JSON.parse(savedTimeBlocks));
-      }
+      if (savedPriorities) setTopPriorities(JSON.parse(savedPriorities));
+      if (savedBrainDump) setBrainDump(JSON.parse(savedBrainDump));
+      if (savedTimeBlocks) setTimeBlocks(JSON.parse(savedTimeBlocks));
       
       setIsLoaded(true);
     } catch (error) {
@@ -40,7 +47,7 @@ export default function TimeboxingApp() {
     }
   }, []);
 
-  // Guardar en localStorage solo después de cargar los datos iniciales
+  // Guardar en localStorage
   useEffect(() => {
     if (isLoaded) {
       try {
@@ -70,6 +77,196 @@ export default function TimeboxingApp() {
       }
     }
   }, [timeBlocks, isLoaded]);
+
+  // Auto-scroll cuando el cursor está cerca de los bordes
+  const handleAutoScroll = (clientY) => {
+    const scrollThreshold = 100;
+    const scrollSpeed = 15;
+    const viewportHeight = window.innerHeight;
+
+    if (clientY < scrollThreshold) {
+      // Scroll hacia arriba
+      window.scrollBy(0, -scrollSpeed);
+    } else if (clientY > viewportHeight - scrollThreshold) {
+      // Scroll hacia abajo
+      window.scrollBy(0, scrollSpeed);
+    }
+  };
+
+  // Iniciar drag
+  const handleDragStart = (e, text, source, fromKey = null, fromIndex = null) => {
+    if (!text || !text.trim()) return;
+
+    // Crear elemento fantasma (ghost)
+    const ghost = document.createElement('div');
+    ghost.textContent = text;
+    ghost.style.position = 'fixed';
+    ghost.style.padding = '8px 12px';
+    ghost.style.background = 'white';
+    ghost.style.border = '2px solid #4F46E5';
+    ghost.style.borderRadius = '8px';
+    ghost.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    ghost.style.zIndex = '9999';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.maxWidth = '300px';
+    ghost.style.fontSize = '14px';
+    ghost.style.fontWeight = '500';
+    ghost.style.cursor = 'grabbing';
+    ghost.style.opacity = '0.95';
+    
+    // Posicionar el ghost en la posición del cursor
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+    
+    ghost.style.left = `${clientX + 10}px`;
+    ghost.style.top = `${clientY + 10}px`;
+    
+    document.body.appendChild(ghost);
+    dragGhostRef.current = ghost;
+
+    setDragState({
+      isDragging: true,
+      dragData: { text, source, fromKey, fromIndex },
+      ghostElement: ghost,
+      initialX: clientX,
+      initialY: clientY,
+      currentX: clientX,
+      currentY: clientY
+    });
+
+    // Iniciar auto-scroll
+    autoScrollIntervalRef.current = setInterval(() => {
+      if (dragState.isDragging) {
+        handleAutoScroll(dragState.currentY);
+      }
+    }, 50);
+  };
+
+  // Mover durante el drag
+  const handleDragMove = (e) => {
+    if (!dragState.isDragging || !dragGhostRef.current) return;
+
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+
+    // Actualizar posición del ghost
+    dragGhostRef.current.style.left = `${clientX + 10}px`;
+    dragGhostRef.current.style.top = `${clientY + 10}px`;
+
+    // Actualizar estado para auto-scroll
+    setDragState(prev => ({
+      ...prev,
+      currentX: clientX,
+      currentY: clientY
+    }));
+
+    handleAutoScroll(clientY);
+  };
+
+  // Finalizar drag
+  const handleDragEnd = (e) => {
+    if (!dragState.isDragging) return;
+
+    // Limpiar ghost
+    if (dragGhostRef.current) {
+      dragGhostRef.current.remove();
+      dragGhostRef.current = null;
+    }
+
+    // Limpiar auto-scroll
+    if (autoScrollIntervalRef.current) {
+      clearInterval(autoScrollIntervalRef.current);
+      autoScrollIntervalRef.current = null;
+    }
+
+    // Encontrar el elemento en la posición del drop
+    const clientX = e.clientX || (e.changedTouches && e.changedTouches[0].clientX);
+    const clientY = e.clientY || (e.changedTouches && e.changedTouches[0].clientY);
+    
+    const elementBelow = document.elementFromPoint(clientX, clientY);
+    
+    if (elementBelow) {
+      // Buscar el drop zone más cercano
+      const dropZone = elementBelow.closest('[data-drop-zone]');
+      const priorityZone = elementBelow.closest('[data-priority-zone]');
+      
+      if (dropZone) {
+        const hour = dropZone.dataset.hour;
+        const half = dropZone.dataset.half;
+        handleDropOnSchedule(hour, half);
+      } else if (priorityZone) {
+        const targetIndex = parseInt(priorityZone.dataset.priorityIndex);
+        handleDropOnPriority(targetIndex);
+      }
+    }
+
+    // Reset drag state
+    setDragState({
+      isDragging: false,
+      dragData: null,
+      ghostElement: null,
+      initialX: 0,
+      initialY: 0,
+      currentX: 0,
+      currentY: 0
+    });
+  };
+
+  // Manejar drop en schedule
+  const handleDropOnSchedule = (hour, half) => {
+    if (!dragState.dragData) return;
+
+    const key = `${hour}-${half}`;
+    const { text, fromKey, fromIndex } = dragState.dragData;
+    
+    const newBlocks = { ...timeBlocks };
+
+    // Si viene de otro bloque del schedule, eliminarlo del origen
+    if (fromKey && fromIndex !== null) {
+      if (newBlocks[fromKey]) {
+        newBlocks[fromKey] = newBlocks[fromKey].filter((_, i) => i !== fromIndex);
+        if (newBlocks[fromKey].length === 0) {
+          delete newBlocks[fromKey];
+        }
+      }
+    }
+
+    // Agregar al nuevo bloque
+    const currentItems = newBlocks[key] || [];
+    newBlocks[key] = [...currentItems, { text, completed: false }];
+    
+    setTimeBlocks(newBlocks);
+  };
+
+  // Manejar drop en priority
+  const handleDropOnPriority = (targetIndex) => {
+    if (!dragState.dragData) return;
+
+    const { source, fromIndex } = dragState.dragData;
+
+    if (source === 'priority' && fromIndex !== null && fromIndex !== targetIndex) {
+      const newPriorities = [...topPriorities];
+      const sourceText = newPriorities[fromIndex];
+      const targetText = newPriorities[targetIndex];
+      
+      newPriorities[fromIndex] = targetText;
+      newPriorities[targetIndex] = sourceText;
+      
+      setTopPriorities(newPriorities);
+    }
+  };
+
+  // Limpiar eventos al desmontar
+  useEffect(() => {
+    return () => {
+      if (dragGhostRef.current) {
+        dragGhostRef.current.remove();
+      }
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current);
+      }
+    };
+  }, []);
 
   const handlePriorityChange = (index, value) => {
     const newPriorities = [...topPriorities];
@@ -112,86 +309,6 @@ export default function TimeboxingApp() {
     if (brainDump.length > 1) {
       setBrainDump(brainDump.filter((_, i) => i !== index));
     }
-  };
-
-  const handleDragStart = (e, text, source, fromKey = null, fromIndex = null) => {
-    const dragData = {
-      text,
-      source,
-      fromKey,
-      fromIndex
-    };
-    setDraggedTask(dragData);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
-  };
-
-  const handlePriorityDrop = (e, targetIndex) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    let dragData;
-    try {
-      dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
-    } catch {
-      dragData = draggedTask;
-    }
-
-    if (!dragData) return;
-
-    // Si viene de Top Priorities, intercambiar las tareas
-    if (dragData.source === 'priority' && dragData.fromIndex !== null && dragData.fromIndex !== targetIndex) {
-      const newPriorities = [...topPriorities];
-      const sourceText = newPriorities[dragData.fromIndex];
-      const targetText = newPriorities[targetIndex];
-      
-      newPriorities[dragData.fromIndex] = targetText;
-      newPriorities[targetIndex] = sourceText;
-      
-      setTopPriorities(newPriorities);
-    }
-    
-    setDraggedTask(null);
-  };
-
-  const handleDrop = (e, hour, half) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const key = `${hour}-${half}`;
-    let dragData;
-    
-    try {
-      dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
-    } catch {
-      dragData = draggedTask || { text: e.dataTransfer.getData('text'), source: 'external' };
-    }
-
-    if (!dragData.text || !dragData.text.trim()) return;
-
-    const newBlocks = { ...timeBlocks };
-
-    // Si viene de otro bloque del schedule, eliminarlo del origen
-    if (dragData.fromKey && dragData.fromIndex !== null) {
-      if (newBlocks[dragData.fromKey]) {
-        newBlocks[dragData.fromKey] = newBlocks[dragData.fromKey].filter((_, i) => i !== dragData.fromIndex);
-        if (newBlocks[dragData.fromKey].length === 0) {
-          delete newBlocks[dragData.fromKey];
-        }
-      }
-    }
-
-    // Agregar al nuevo bloque
-    const currentItems = newBlocks[key] || [];
-    newBlocks[key] = [...currentItems, { text: dragData.text, completed: false }];
-    
-    setTimeBlocks(newBlocks);
-    setDraggedTask(null);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
   };
 
   const removeTimeBlock = (key, itemIndex) => {
@@ -251,6 +368,50 @@ export default function TimeboxingApp() {
     return `${hour}:00 AM`;
   };
 
+  // Agregar listeners globales para drag y prevención de selección
+  useEffect(() => {
+    if (dragState.isDragging) {
+      // Prevenir selección de texto durante drag
+      const preventSelection = (e) => {
+        e.preventDefault();
+      };
+
+      // Aplicar user-select: none al body
+      document.body.style.userSelect = 'none';
+      document.body.style.webkitUserSelect = 'none';
+      document.body.style.msUserSelect = 'none';
+      document.body.style.mozUserSelect = 'none';
+
+      // Bloquear eventos de selección
+      document.addEventListener('selectstart', preventSelection);
+      document.addEventListener('mousedown', preventSelection);
+      
+      // Listeners de movimiento
+      window.addEventListener('pointermove', handleDragMove);
+      window.addEventListener('pointerup', handleDragEnd);
+      window.addEventListener('touchmove', handleDragMove);
+      window.addEventListener('touchend', handleDragEnd);
+      
+      return () => {
+        // Restaurar selección de texto
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+        document.body.style.msUserSelect = '';
+        document.body.style.mozUserSelect = '';
+
+        // Remover bloqueadores de selección
+        document.removeEventListener('selectstart', preventSelection);
+        document.removeEventListener('mousedown', preventSelection);
+        
+        // Remover listeners de movimiento
+        window.removeEventListener('pointermove', handleDragMove);
+        window.removeEventListener('pointerup', handleDragEnd);
+        window.removeEventListener('touchmove', handleDragMove);
+        window.removeEventListener('touchend', handleDragEnd);
+      };
+    }
+  }, [dragState.isDragging, dragState.currentX, dragState.currentY]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto">
@@ -292,15 +453,19 @@ export default function TimeboxingApp() {
                 {topPriorities.map((priority, index) => (
                   <div
                     key={index}
-                    draggable={priority.trim() !== ''}
-                    onDragStart={(e) => handleDragStart(e, priority, 'priority', null, index)}
-                    onDrop={(e) => handlePriorityDrop(e, index)}
-                    onDragOver={(e) => e.preventDefault()}
+                    data-priority-zone
+                    data-priority-index={index}
                     className="relative"
                   >
                     <div className="flex items-center gap-2">
                       {priority.trim() && (
-                        <GripVertical className="w-4 h-4 text-gray-400 cursor-move" />
+                        <div
+                          onPointerDown={(e) => handleDragStart(e, priority, 'priority', null, index)}
+                          onTouchStart={(e) => handleDragStart(e, priority, 'priority', null, index)}
+                          className="cursor-grab active:cursor-grabbing touch-none"
+                        >
+                          <GripVertical className="w-4 h-4 text-gray-400" />
+                        </div>
                       )}
                       <input
                         id={`priority-${index}`}
@@ -329,14 +494,15 @@ export default function TimeboxingApp() {
               </div>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {brainDump.map((item, index) => (
-                  <div
-                    key={index}
-                    draggable={item.trim() !== ''}
-                    onDragStart={(e) => handleDragStart(e, item, 'dump')}
-                    className="flex items-center gap-2"
-                  >
+                  <div key={index} className="flex items-center gap-2">
                     {item.trim() && (
-                      <GripVertical className="w-4 h-4 text-gray-400 cursor-move flex-shrink-0" />
+                      <div
+                        onPointerDown={(e) => handleDragStart(e, item, 'dump')}
+                        onTouchStart={(e) => handleDragStart(e, item, 'dump')}
+                        className="cursor-grab active:cursor-grabbing touch-none flex-shrink-0"
+                      >
+                        <GripVertical className="w-4 h-4 text-gray-400" />
+                      </div>
                     )}
                     <input
                       id={`braindump-${index}`}
@@ -369,8 +535,9 @@ export default function TimeboxingApp() {
               {hours.map((hour) => (
                 <React.Fragment key={hour}>
                   <div
-                    onDrop={(e) => handleDrop(e, hour, '00')}
-                    onDragOver={handleDragOver}
+                    data-drop-zone
+                    data-hour={hour}
+                    data-half="00"
                     className={`border-2 border-dashed rounded-lg p-3 min-h-24 transition-colors ${
                       timeBlocks[`${hour}-00`]
                         ? 'bg-indigo-50 border-indigo-400'
@@ -385,9 +552,7 @@ export default function TimeboxingApp() {
                         {timeBlocks[`${hour}-00`].map((task, idx) => (
                           <div
                             key={idx}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-00`, idx)}
-                            className={`relative border-2 rounded p-2 shadow-sm cursor-move transition-all ${
+                            className={`relative border-2 rounded p-2 shadow-sm transition-all ${
                               task.completed
                                 ? 'bg-gray-100 border-gray-300 opacity-60'
                                 : 'bg-white border-indigo-300'
@@ -400,7 +565,6 @@ export default function TimeboxingApp() {
                                     <button
                                       onClick={() => moveTaskUp(`${hour}-00`, idx)}
                                       className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                      title="Mover arriba"
                                     >
                                       <ChevronUp className="w-3 h-3" />
                                     </button>
@@ -409,7 +573,6 @@ export default function TimeboxingApp() {
                                     <button
                                       onClick={() => moveTaskDown(`${hour}-00`, idx)}
                                       className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                      title="Mover abajo"
                                     >
                                       <ChevronDown className="w-3 h-3" />
                                     </button>
@@ -419,19 +582,26 @@ export default function TimeboxingApp() {
                               <button
                                 onClick={() => removeTimeBlock(`${hour}-00`, idx)}
                                 className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 z-10"
-                                title="Eliminar"
                               >
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
-                            <div
-                              onClick={() => toggleTaskComplete(`${hour}-00`, idx)}
-                              className={`text-sm font-medium pr-16 cursor-pointer select-none ${
-                                task.completed ? 'line-through text-gray-500' : 'text-gray-800'
-                              }`}
-                            >
-                              <GripVertical className="w-3 h-3 inline mr-1 text-gray-400" />
-                              {task.text}
+                            <div className="flex items-center gap-2">
+                              <div
+                                onPointerDown={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-00`, idx)}
+                                onTouchStart={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-00`, idx)}
+                                className="cursor-grab active:cursor-grabbing touch-none"
+                              >
+                                <GripVertical className="w-3 h-3 text-gray-400" />
+                              </div>
+                              <div
+                                onClick={() => toggleTaskComplete(`${hour}-00`, idx)}
+                                className={`text-sm font-medium flex-1 cursor-pointer select-none ${
+                                  task.completed ? 'line-through text-gray-500' : 'text-gray-800'
+                                }`}
+                              >
+                                {task.text}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -440,8 +610,9 @@ export default function TimeboxingApp() {
                   </div>
 
                   <div
-                    onDrop={(e) => handleDrop(e, hour, '30')}
-                    onDragOver={handleDragOver}
+                    data-drop-zone
+                    data-hour={hour}
+                    data-half="30"
                     className={`border-2 border-dashed rounded-lg p-3 min-h-24 transition-colors ${
                       timeBlocks[`${hour}-30`]
                         ? 'bg-indigo-50 border-indigo-400'
@@ -456,9 +627,7 @@ export default function TimeboxingApp() {
                         {timeBlocks[`${hour}-30`].map((task, idx) => (
                           <div
                             key={idx}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-30`, idx)}
-                            className={`relative border-2 rounded p-2 shadow-sm cursor-move transition-all ${
+                            className={`relative border-2 rounded p-2 shadow-sm transition-all ${
                               task.completed
                                 ? 'bg-gray-100 border-gray-300 opacity-60'
                                 : 'bg-white border-indigo-300'
@@ -471,7 +640,6 @@ export default function TimeboxingApp() {
                                     <button
                                       onClick={() => moveTaskUp(`${hour}-30`, idx)}
                                       className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                      title="Mover arriba"
                                     >
                                       <ChevronUp className="w-3 h-3" />
                                     </button>
@@ -480,7 +648,6 @@ export default function TimeboxingApp() {
                                     <button
                                       onClick={() => moveTaskDown(`${hour}-30`, idx)}
                                       className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                      title="Mover abajo"
                                     >
                                       <ChevronDown className="w-3 h-3" />
                                     </button>
@@ -490,19 +657,26 @@ export default function TimeboxingApp() {
                               <button
                                 onClick={() => removeTimeBlock(`${hour}-30`, idx)}
                                 className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 z-10"
-                                title="Eliminar"
                               >
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
-                            <div
-                              onClick={() => toggleTaskComplete(`${hour}-30`, idx)}
-                              className={`text-sm font-medium pr-16 cursor-pointer select-none ${
-                                task.completed ? 'line-through text-gray-500' : 'text-gray-800'
-                              }`}
-                            >
-                              <GripVertical className="w-3 h-3 inline mr-1 text-gray-400" />
-                              {task.text}
+                            <div className="flex items-center gap-2">
+                              <div
+                                onPointerDown={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-30`, idx)}
+                                onTouchStart={(e) => handleDragStart(e, task.text, 'schedule', `${hour}-30`, idx)}
+                                className="cursor-grab active:cursor-grabbing touch-none"
+                              >
+                                <GripVertical className="w-3 h-3 text-gray-400" />
+                              </div>
+                              <div
+                                onClick={() => toggleTaskComplete(`${hour}-30`, idx)}
+                                className={`text-sm font-medium flex-1 cursor-pointer select-none ${
+                                  task.completed ? 'line-through text-gray-500' : 'text-gray-800'
+                                }`}
+                              >
+                                {task.text}
+                              </div>
                             </div>
                           </div>
                         ))}

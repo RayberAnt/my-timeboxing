@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GripVertical, Plus, X, Calendar, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 
 export default function TimeboxingApp() {
@@ -142,8 +142,8 @@ export default function TimeboxingApp() {
     }, 50);
   };
 
-  // Mover durante el drag
-  const handleDragMove = (e) => {
+  // Mover durante el drag (memoizado)
+  const handleDragMove = useCallback((e) => {
     if (!dragState.isDragging || !dragGhostRef.current) return;
 
     const clientX = e.clientX || (e.touches && e.touches[0].clientX);
@@ -161,10 +161,10 @@ export default function TimeboxingApp() {
     }));
 
     handleAutoScroll(clientY);
-  };
+  }, [dragState.isDragging]);
 
-  // Finalizar drag
-  const handleDragEnd = (e) => {
+  // Finalizar drag (memoizado)
+  const handleDragEnd = useCallback((e) => {
     if (!dragState.isDragging) return;
 
     // Limpiar ghost
@@ -210,10 +210,10 @@ export default function TimeboxingApp() {
       currentX: 0,
       currentY: 0
     });
-  };
+  }, [dragState.isDragging, dragState.dragData, timeBlocks, topPriorities]);
 
   // Manejar drop en schedule
-  const handleDropOnSchedule = (hour, half) => {
+  const handleDropOnSchedule = useCallback((hour, half) => {
     if (!dragState.dragData) return;
 
     const key = `${hour}-${half}`;
@@ -236,10 +236,10 @@ export default function TimeboxingApp() {
     newBlocks[key] = [...currentItems, { text, completed: false }];
     
     setTimeBlocks(newBlocks);
-  };
+  }, [dragState.dragData, timeBlocks]);
 
   // Manejar drop en priority
-  const handleDropOnPriority = (targetIndex) => {
+  const handleDropOnPriority = useCallback((targetIndex) => {
     if (!dragState.dragData) return;
 
     const { source, fromIndex } = dragState.dragData;
@@ -254,7 +254,7 @@ export default function TimeboxingApp() {
       
       setTopPriorities(newPriorities);
     }
-  };
+  }, [dragState.dragData, topPriorities]);
 
   // Limpiar eventos al desmontar
   useEffect(() => {
@@ -410,7 +410,7 @@ export default function TimeboxingApp() {
         window.removeEventListener('touchend', handleDragEnd);
       };
     }
-  }, [dragState.isDragging, dragState.currentX, dragState.currentY]);
+  }, [dragState.isDragging, handleDragMove, handleDragEnd]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -691,5 +691,4 @@ export default function TimeboxingApp() {
       </div>
     </div>
   );
-  
 }

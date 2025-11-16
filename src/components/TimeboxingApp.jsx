@@ -93,6 +93,110 @@ export default function TimeboxingApp() {
     }
   };
 
+  // Manejar drop en schedule
+  const handleDropOnSchedule = useCallback((hour, half) => {
+    if (!dragState.dragData) return;
+
+    const key = `${hour}-${half}`;
+    const { text, fromKey, fromIndex } = dragState.dragData;
+    
+    const newBlocks = { ...timeBlocks };
+
+    // Si viene de otro bloque del schedule, eliminarlo del origen
+    if (fromKey && fromIndex !== null) {
+      if (newBlocks[fromKey]) {
+        newBlocks[fromKey] = newBlocks[fromKey].filter((_, i) => i !== fromIndex);
+        if (newBlocks[fromKey].length === 0) {
+          delete newBlocks[fromKey];
+        }
+      }
+    }
+
+    // Agregar al nuevo bloque
+    const currentItems = newBlocks[key] || [];
+    newBlocks[key] = [...currentItems, { text, completed: false }];
+    
+    setTimeBlocks(newBlocks);
+  }, [dragState.dragData, timeBlocks]);
+
+  // Manejar drop en priority
+  const handleDropOnPriority = useCallback((targetIndex) => {
+    if (!dragState.dragData) return;
+
+    const { source, fromIndex, text } = dragState.dragData;
+
+    if (source === 'priority' && fromIndex !== null && fromIndex !== targetIndex) {
+      // Intercambiar tareas dentro de Top Priorities
+      const newPriorities = [...topPriorities];
+      const sourceText = newPriorities[fromIndex];
+      const targetText = newPriorities[targetIndex];
+      
+      newPriorities[fromIndex] = targetText;
+      newPriorities[targetIndex] = sourceText;
+      
+      setTopPriorities(newPriorities);
+    } else if (source === 'dump' && fromIndex !== null) {
+      // Mover desde Brain Dump a Top Priorities
+      const newPriorities = [...topPriorities];
+      const newBrainDump = [...brainDump];
+      
+      // Guardar lo que había en el destino
+      const oldPriority = newPriorities[targetIndex];
+      
+      // Mover la tarea de Brain Dump a Top Priorities
+      newPriorities[targetIndex] = text;
+      
+      // Eliminar de Brain Dump
+      newBrainDump.splice(fromIndex, 1);
+      
+      // Si Brain Dump queda vacío, agregar una línea vacía
+      if (newBrainDump.length === 0) {
+        newBrainDump.push('');
+      }
+      
+      // Si había algo en Top Priorities, moverlo a Brain Dump
+      if (oldPriority.trim()) {
+        // Buscar la primera posición vacía o agregarlo al final
+        const emptyIndex = newBrainDump.findIndex(item => !item.trim());
+        if (emptyIndex !== -1) {
+          newBrainDump[emptyIndex] = oldPriority;
+        } else {
+          newBrainDump.push(oldPriority);
+        }
+      }
+      
+      setTopPriorities(newPriorities);
+      setBrainDump(newBrainDump);
+    }
+  }, [dragState.dragData, topPriorities, brainDump]);
+
+  // Manejar drop en Brain Dump
+  const handleDropOnBrainDump = useCallback(() => {
+    if (!dragState.dragData) return;
+
+    const { source, fromIndex, text } = dragState.dragData;
+
+    if (source === 'priority' && fromIndex !== null && text.trim()) {
+      // Mover desde Top Priorities a Brain Dump
+      const newPriorities = [...topPriorities];
+      const newBrainDump = [...brainDump];
+      
+      // Limpiar la prioridad de origen
+      newPriorities[fromIndex] = '';
+      
+      // Agregar a Brain Dump (buscar primera posición vacía o agregar al final)
+      const emptyIndex = newBrainDump.findIndex(item => !item.trim());
+      if (emptyIndex !== -1) {
+        newBrainDump[emptyIndex] = text;
+      } else {
+        newBrainDump.push(text);
+      }
+      
+      setTopPriorities(newPriorities);
+      setBrainDump(newBrainDump);
+    }
+  }, [dragState.dragData, topPriorities, brainDump]);
+
   // Iniciar drag
   const handleDragStart = (e, text, source, fromKey = null, fromIndex = null) => {
     if (!text || !text.trim()) return;
@@ -189,6 +293,7 @@ export default function TimeboxingApp() {
       // Buscar el drop zone más cercano
       const dropZone = elementBelow.closest('[data-drop-zone]');
       const priorityZone = elementBelow.closest('[data-priority-zone]');
+      const brainDumpZone = elementBelow.closest('[data-braindump-zone]');
       
       if (dropZone) {
         const hour = dropZone.dataset.hour;
@@ -197,6 +302,8 @@ export default function TimeboxingApp() {
       } else if (priorityZone) {
         const targetIndex = parseInt(priorityZone.dataset.priorityIndex);
         handleDropOnPriority(targetIndex);
+      } else if (brainDumpZone) {
+        handleDropOnBrainDump();
       }
     }
 
@@ -210,51 +317,7 @@ export default function TimeboxingApp() {
       currentX: 0,
       currentY: 0
     });
-  }, [dragState.isDragging, dragState.dragData, timeBlocks, topPriorities]);
-
-  // Manejar drop en schedule
-  const handleDropOnSchedule = useCallback((hour, half) => {
-    if (!dragState.dragData) return;
-
-    const key = `${hour}-${half}`;
-    const { text, fromKey, fromIndex } = dragState.dragData;
-    
-    const newBlocks = { ...timeBlocks };
-
-    // Si viene de otro bloque del schedule, eliminarlo del origen
-    if (fromKey && fromIndex !== null) {
-      if (newBlocks[fromKey]) {
-        newBlocks[fromKey] = newBlocks[fromKey].filter((_, i) => i !== fromIndex);
-        if (newBlocks[fromKey].length === 0) {
-          delete newBlocks[fromKey];
-        }
-      }
-    }
-
-    // Agregar al nuevo bloque
-    const currentItems = newBlocks[key] || [];
-    newBlocks[key] = [...currentItems, { text, completed: false }];
-    
-    setTimeBlocks(newBlocks);
-  }, [dragState.dragData, timeBlocks]);
-
-  // Manejar drop en priority
-  const handleDropOnPriority = useCallback((targetIndex) => {
-    if (!dragState.dragData) return;
-
-    const { source, fromIndex } = dragState.dragData;
-
-    if (source === 'priority' && fromIndex !== null && fromIndex !== targetIndex) {
-      const newPriorities = [...topPriorities];
-      const sourceText = newPriorities[fromIndex];
-      const targetText = newPriorities[targetIndex];
-      
-      newPriorities[fromIndex] = targetText;
-      newPriorities[targetIndex] = sourceText;
-      
-      setTopPriorities(newPriorities);
-    }
-  }, [dragState.dragData, topPriorities]);
+  }, [dragState.isDragging, handleDropOnSchedule, handleDropOnPriority, handleDropOnBrainDump]);
 
   // Limpiar eventos al desmontar
   useEffect(() => {
@@ -492,13 +555,16 @@ export default function TimeboxingApp() {
                   <Plus className="w-5 h-5" />
                 </button>
               </div>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div 
+                className="space-y-2 max-h-96 overflow-y-auto"
+                data-braindump-zone
+              >
                 {brainDump.map((item, index) => (
                   <div key={index} className="flex items-center gap-2">
                     {item.trim() && (
                       <div
-                        onPointerDown={(e) => handleDragStart(e, item, 'dump')}
-                        onTouchStart={(e) => handleDragStart(e, item, 'dump')}
+                        onPointerDown={(e) => handleDragStart(e, item, 'dump', null, index)}
+                        onTouchStart={(e) => handleDragStart(e, item, 'dump', null, index)}
                         className="cursor-grab active:cursor-grabbing touch-none flex-shrink-0"
                       >
                         <GripVertical className="w-4 h-4 text-gray-400" />

@@ -349,29 +349,50 @@ export default function TimeboxingApp() {
   const handleBrainDumpChange = (index, value) => {
     const newDump = [...brainDump];
     newDump[index] = value;
+    
+    // Si estamos escribiendo en la última línea y no está vacía, agregar una nueva línea
+    if (index === newDump.length - 1 && value.trim() !== '') {
+      newDump.push('');
+    }
+    
     setBrainDump(newDump);
   };
 
   const handleBrainDumpKeyDown = (e, index) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      const newDump = [...brainDump];
-      newDump.splice(index + 1, 0, '');
-      setBrainDump(newDump);
-      setTimeout(() => {
-        document.getElementById(`braindump-${index + 1}`)?.focus();
-      }, 0);
+      
+      // Si ya hay una línea vacía al final, moverse a ella
+      if (brainDump[brainDump.length - 1].trim() === '') {
+        document.getElementById(`braindump-${brainDump.length - 1}`)?.focus();
+      } else {
+        // Si no hay línea vacía, crear una nueva
+        const newDump = [...brainDump];
+        newDump.push('');
+        setBrainDump(newDump);
+        setTimeout(() => {
+          document.getElementById(`braindump-${newDump.length - 1}`)?.focus();
+        }, 0);
+      }
     }
   };
 
   const addBrainDumpItem = () => {
-    setBrainDump([...brainDump, '']);
+    // Solo agregar si la última línea no está vacía
+    if (brainDump[brainDump.length - 1].trim() !== '') {
+      setBrainDump([...brainDump, '']);
+    }
   };
 
   const removeBrainDumpItem = (index) => {
-    if (brainDump.length > 1) {
-      setBrainDump(brainDump.filter((_, i) => i !== index));
+    const newDump = brainDump.filter((_, i) => i !== index);
+    
+    // Asegurar que siempre haya al menos una línea vacía
+    if (newDump.length === 0 || newDump[newDump.length - 1].trim() !== '') {
+      newDump.push('');
     }
+    
+    setBrainDump(newDump);
   };
 
   const removeTimeBlock = (key, itemIndex) => {
@@ -579,7 +600,7 @@ export default function TimeboxingApp() {
                       placeholder="Add a task..."
                       className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                     />
-                    {brainDump.length > 1 && (
+                    {brainDump.length > 1 && item.trim() !== '' && (
                       <button
                         onClick={() => removeBrainDumpItem(index)}
                         className="p-1 text-red-500 hover:bg-red-50 rounded"

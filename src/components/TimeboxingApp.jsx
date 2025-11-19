@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GripVertical, Plus, X, Calendar, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { GripVertical, Plus, X, Calendar, Trash2 } from 'lucide-react';
 
 export default function TimeboxingApp() {
   const [topPriorities, setTopPriorities] = useState(['', '', '']);
@@ -98,12 +98,12 @@ export default function TimeboxingApp() {
     if (!dragState.dragData) return;
 
     const key = `${hour}-${half}`;
-    const { text, fromKey, fromIndex } = dragState.dragData;
+    const { text, source, fromKey, fromIndex } = dragState.dragData;
     
     const newBlocks = { ...timeBlocks };
 
     // Si viene de otro bloque del schedule, eliminarlo del origen
-    if (fromKey && fromIndex !== null) {
+    if (fromKey && fromIndex !== null && source === 'schedule') {
       if (newBlocks[fromKey]) {
         newBlocks[fromKey] = newBlocks[fromKey].filter((_, i) => i !== fromIndex);
         if (newBlocks[fromKey].length === 0) {
@@ -117,6 +117,28 @@ export default function TimeboxingApp() {
     newBlocks[key] = [...currentItems, { text, completed: false }];
     
     setTimeBlocks(newBlocks);
+  }, [dragState.dragData, timeBlocks]);
+
+  // Manejar reordenamiento dentro del mismo bloque del schedule
+  const handleDropOnScheduleTask = useCallback((targetKey, targetIndex) => {
+    if (!dragState.dragData) return;
+
+    const { source, fromKey, fromIndex, text } = dragState.dragData;
+
+    // Solo reordenar si viene del mismo bloque
+    if (source === 'schedule' && fromKey === targetKey && fromIndex !== null && fromIndex !== targetIndex) {
+      const newBlocks = { ...timeBlocks };
+      const items = [...newBlocks[targetKey]];
+      
+      // Remover del índice original
+      const [movedItem] = items.splice(fromIndex, 1);
+      
+      // Insertar en el nuevo índice
+      items.splice(targetIndex, 0, movedItem);
+      
+      newBlocks[targetKey] = items;
+      setTimeBlocks(newBlocks);
+    }
   }, [dragState.dragData, timeBlocks]);
 
   // Manejar drop en priority
@@ -291,11 +313,16 @@ export default function TimeboxingApp() {
     
     if (elementBelow) {
       // Buscar el drop zone más cercano
+      const scheduleTask = elementBelow.closest('[data-schedule-task]');
       const dropZone = elementBelow.closest('[data-drop-zone]');
       const priorityZone = elementBelow.closest('[data-priority-zone]');
       const brainDumpZone = elementBelow.closest('[data-braindump-zone]');
       
-      if (dropZone) {
+      if (scheduleTask) {
+        const taskKey = scheduleTask.dataset.taskKey;
+        const taskIndex = parseInt(scheduleTask.dataset.taskIndex);
+        handleDropOnScheduleTask(taskKey, taskIndex);
+      } else if (dropZone) {
         const hour = dropZone.dataset.hour;
         const half = dropZone.dataset.half;
         handleDropOnSchedule(hour, half);
@@ -317,7 +344,7 @@ export default function TimeboxingApp() {
       currentX: 0,
       currentY: 0
     });
-  }, [dragState.isDragging, handleDropOnSchedule, handleDropOnPriority, handleDropOnBrainDump]);
+  }, [dragState.isDragging, handleDropOnSchedule, handleDropOnScheduleTask, handleDropOnPriority, handleDropOnBrainDump]);
 
   // Limpiar eventos al desmontar
   useEffect(() => {
@@ -415,24 +442,6 @@ export default function TimeboxingApp() {
       };
       setTimeBlocks(newBlocks);
     }
-  };
-
-  const moveTaskUp = (key, itemIndex) => {
-    if (itemIndex === 0) return;
-    const newBlocks = { ...timeBlocks };
-    const items = [...newBlocks[key]];
-    [items[itemIndex - 1], items[itemIndex]] = [items[itemIndex], items[itemIndex - 1]];
-    newBlocks[key] = items;
-    setTimeBlocks(newBlocks);
-  };
-
-  const moveTaskDown = (key, itemIndex) => {
-    const newBlocks = { ...timeBlocks };
-    if (itemIndex === newBlocks[key].length - 1) return;
-    const items = [...newBlocks[key]];
-    [items[itemIndex], items[itemIndex + 1]] = [items[itemIndex + 1], items[itemIndex]];
-    newBlocks[key] = items;
-    setTimeBlocks(newBlocks);
   };
 
   const clearAllTasks = () => {
@@ -639,6 +648,9 @@ export default function TimeboxingApp() {
                         {timeBlocks[`${hour}-00`].map((task, idx) => (
                           <div
                             key={idx}
+                            data-schedule-task
+                            data-task-key={`${hour}-00`}
+                            data-task-index={idx}
                             className={`relative border-2 rounded p-2 shadow-sm transition-all ${
                               task.completed
                                 ? 'bg-gray-100 border-gray-300 opacity-60'
@@ -646,26 +658,6 @@ export default function TimeboxingApp() {
                             }`}
                           >
                             <div className="flex items-center gap-1 absolute -top-2 -right-2">
-                              {timeBlocks[`${hour}-00`].length > 1 && (
-                                <>
-                                  {idx > 0 && (
-                                    <button
-                                      onClick={() => moveTaskUp(`${hour}-00`, idx)}
-                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                    >
-                                      <ChevronUp className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                  {idx < timeBlocks[`${hour}-00`].length - 1 && (
-                                    <button
-                                      onClick={() => moveTaskDown(`${hour}-00`, idx)}
-                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                    >
-                                      <ChevronDown className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </>
-                              )}
                               <button
                                 onClick={() => removeTimeBlock(`${hour}-00`, idx)}
                                 className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 z-10"
@@ -714,6 +706,9 @@ export default function TimeboxingApp() {
                         {timeBlocks[`${hour}-30`].map((task, idx) => (
                           <div
                             key={idx}
+                            data-schedule-task
+                            data-task-key={`${hour}-30`}
+                            data-task-index={idx}
                             className={`relative border-2 rounded p-2 shadow-sm transition-all ${
                               task.completed
                                 ? 'bg-gray-100 border-gray-300 opacity-60'
@@ -721,26 +716,6 @@ export default function TimeboxingApp() {
                             }`}
                           >
                             <div className="flex items-center gap-1 absolute -top-2 -right-2">
-                              {timeBlocks[`${hour}-30`].length > 1 && (
-                                <>
-                                  {idx > 0 && (
-                                    <button
-                                      onClick={() => moveTaskUp(`${hour}-30`, idx)}
-                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                    >
-                                      <ChevronUp className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                  {idx < timeBlocks[`${hour}-30`].length - 1 && (
-                                    <button
-                                      onClick={() => moveTaskDown(`${hour}-30`, idx)}
-                                      className="p-0.5 bg-blue-500 text-white rounded-full hover:bg-blue-600 z-10"
-                                    >
-                                      <ChevronDown className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </>
-                              )}
                               <button
                                 onClick={() => removeTimeBlock(`${hour}-30`, idx)}
                                 className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 z-10"

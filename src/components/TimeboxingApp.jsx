@@ -413,13 +413,18 @@ export default function TimeboxingApp() {
 
   const removeBrainDumpItem = (index) => {
     const newDump = brainDump.filter((_, i) => i !== index);
-    
     // Asegurar que siempre haya al menos una línea vacía
     if (newDump.length === 0 || newDump[newDump.length - 1].trim() !== '') {
       newDump.push('');
     }
-    
     setBrainDump(newDump);
+  };
+
+  // Eliminar tarea de Top Priorities
+  const removePriorityItem = (index) => {
+    const newPriorities = [...topPriorities];
+    newPriorities[index] = '';
+    setTopPriorities(newPriorities);
   };
 
   const removeTimeBlock = (key, itemIndex) => {
@@ -569,6 +574,15 @@ export default function TimeboxingApp() {
                         placeholder={`Priority ${index + 1}`}
                         className="flex-1 px-4 py-3 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500 font-medium"
                       />
+                      {/* Botón X para borrar tarea de Top Priorities */}
+                      {topPriorities.length > 1 && priority.trim() !== '' && (
+                        <button
+                          onClick={() => removePriorityItem(index)}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

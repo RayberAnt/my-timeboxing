@@ -2,9 +2,22 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GripVertical, Plus, X, Calendar, Trash2 } from 'lucide-react';
 
 export default function TimeboxingApp() {
+    // ...existing code...
+
+    // ...existing code...
+
   const [topPriorities, setTopPriorities] = useState(['', '', '']);
   const [brainDump, setBrainDump] = useState(['']);
   const [timeBlocks, setTimeBlocks] = useState({});
+
+  // Verifica si una tarea está en Schedule
+  const isTaskScheduled = useCallback((taskText) => {
+    if (!taskText || !taskText.trim()) return false;
+    return Object.values(timeBlocks).some(block =>
+      block.some(item => item.text === taskText)
+    );
+  }, [timeBlocks]);
+
   const [isLoaded, setIsLoaded] = useState(false);
   
   // Estados para el drag personalizado
@@ -123,7 +136,7 @@ export default function TimeboxingApp() {
   const handleDropOnScheduleTask = useCallback((targetKey, targetIndex) => {
     if (!dragState.dragData) return;
 
-    const { source, fromKey, fromIndex, text } = dragState.dragData;
+    const { source, fromKey, fromIndex } = dragState.dragData;
 
     // Solo reordenar si viene del mismo bloque
     if (source === 'schedule' && fromKey === targetKey && fromIndex !== null && fromIndex !== targetIndex) {
@@ -572,7 +585,7 @@ export default function TimeboxingApp() {
                         onChange={(e) => handlePriorityChange(index, e.target.value)}
                         onKeyDown={(e) => handlePriorityKeyDown(e, index)}
                         placeholder={`Priority ${index + 1}`}
-                        className="flex-1 px-4 py-3 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500 font-medium"
+                        className={`flex-1 px-4 py-3 border-2 border-indigo-200 rounded-lg focus:outline-none focus:border-indigo-500 font-medium ${isTaskScheduled(priority) ? 'bg-gray-200 opacity-60' : ''}`}
                       />
                       {/* Botón X para borrar tarea de Top Priorities */}
                       {topPriorities.length > 1 && priority.trim() !== '' && (
@@ -621,7 +634,7 @@ export default function TimeboxingApp() {
                       onChange={(e) => handleBrainDumpChange(index, e.target.value)}
                       onKeyDown={(e) => handleBrainDumpKeyDown(e, index)}
                       placeholder="Add a task..."
-                      className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                      className={`flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 ${isTaskScheduled(item) ? 'bg-gray-200 opacity-60' : ''}`}
                     />
                     {brainDump.length > 1 && item.trim() !== '' && (
                       <button

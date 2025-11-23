@@ -2,10 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GripVertical, Plus, X, Calendar, Trash2 } from 'lucide-react';
 
 export default function TimeboxingApp() {
-    // ...existing code...
-
-    // ...existing code...
-
   const [topPriorities, setTopPriorities] = useState(['', '', '']);
   const [brainDump, setBrainDump] = useState(['']);
   const [timeBlocks, setTimeBlocks] = useState({});
@@ -548,7 +544,7 @@ export default function TimeboxingApp() {
                 title="Borrar todas las tareas"
               >
                 <Trash2 className="w-5 h-5" />
-                Limpiar Todo
+                Delete All
               </button>
             </div>
           </div>

@@ -555,7 +555,7 @@ export default function TimeboxingApp() {
             <div className="space-y-6">
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h2 className="text-2xl font-bold text-indigo-900 mb-4 border-b-2 border-indigo-200 pb-2">
-                  Top Priorities
+                  2. Top Priorities
                 </h2>
                 <div className="space-y-3">
                   {topPriorities.map((priority, index) => (
@@ -601,7 +601,7 @@ export default function TimeboxingApp() {
 
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <div className="flex items-center justify-between mb-4 border-b-2 border-indigo-200 pb-2">
-                  <h2 className="text-2xl font-bold text-indigo-900">Brain Dump</h2>
+                  <h2 className="text-2xl font-bold text-indigo-900">1. Brain Dump</h2>
                   <button
                     onClick={addBrainDumpItem}
                     className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -649,7 +649,7 @@ export default function TimeboxingApp() {
 
             <div className="lg:col-span-2 bg-white rounded-lg shadow-lg p-6">
               <h2 className="text-2xl font-bold text-indigo-900 mb-4 border-b-2 border-indigo-200 pb-2">
-                Schedule
+                3. Schedule
               </h2>
               <div className="grid grid-cols-2 gap-4">
                 {hours.map((hour) => (
